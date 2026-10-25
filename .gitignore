@@ -1,0 +1,23 @@
+# =====================================================================
+# Gitignore Repo Kelompok (app/)
+# Memastikan UI Personal Page individu & kredensial lokal tidak ikut ter-commit
+# =====================================================================
+
+# Personal Page Individu (jika ditaruh di dalam atau sekitar repo)
+personal/
+assets/
+personal_index.php
+identity.php
+
+# Kredensial Database Lokal
+config/db.php
+db.local.php
+.env
+
+# Dokumen & OS Files
+implementation_plan.md
+task.md
+system_architecture.md
+.DS_Store
+Thumbs.db
+*.log
