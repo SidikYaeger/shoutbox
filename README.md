@@ -15,7 +15,7 @@ Repositori ini merupakan aplikasi bersama (**Shoutbox**) untuk **Tugas 1 Pra-UTS
 | **`m4`** | Anggota 4 | `103012400247` | Muhammad Fazil Ataurrahman |
 
 ---
-AAAAAA
+
 
 ## Fitur Aplikasi Shoutbox
 
