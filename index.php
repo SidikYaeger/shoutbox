@@ -26,7 +26,7 @@ foreach ($identityCandidates as $identityFile) {
 }
 
 if (!defined('MEMBER_ROUTE')) {
-    define('MEMBER_ROUTE', 'm4');
+    define('MEMBER_ROUTE', 'm3');
 }
 if (!defined('MEMBER_NAMA')) {
     define('MEMBER_NAMA', 'Muhammad Fazil Ataurrahman');
@@ -247,82 +247,7 @@ if ($action === 'fetch') {
 }
 
 // ============================================================================
-// 2. Endpoint Kirim Pesan: AJAX (POST ?action=post) maupun Form Reguler
-// ============================================================================
-$formError = '';
-$formSuccess = '';
-$oldNama = '';
-$oldPesan = '';
-
-if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $isAjax = ($action === 'post')
-        || (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
-        || (isset($_SERVER['HTTP_ACCEPT']) && strpos((string) $_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
-
-    $rawInput = file_get_contents('php://input');
-    $jsonBody = is_string($rawInput) && $rawInput !== '' ? json_decode($rawInput, true) : null;
-
-    $inputNama  = is_array($jsonBody) && isset($jsonBody['nama'])  ? (string) $jsonBody['nama']  : (string) ($_POST['nama'] ?? '');
-    $inputPesan = is_array($jsonBody) && isset($jsonBody['pesan']) ? (string) $jsonBody['pesan'] : (string) ($_POST['pesan'] ?? '');
-
-    try {
-        $pdo = get_db_connection();
-        $result = create_shout($pdo, $inputNama, $inputPesan);
-
-        if ($isAjax) {
-            header('Content-Type: application/json; charset=utf-8');
-            if (!$result['ok']) {
-                http_response_code(422);
-                echo json_encode([
-                    'ok'    => false,
-                    'error' => $result['error'] ?? 'Input tidak valid.',
-                ], JSON_UNESCAPED_UNICODE);
-                exit;
-            }
-
-            $items = fetch_shouts($pdo, $searchQuery, 50);
-            $senderStats = fetch_sender_stats($pdo);
-            echo json_encode([
-                'ok'      => true,
-                'message' => 'Terkirim via ' . MEMBER_ROUTE . '.',
-                'served_by' => [
-                    'route_id' => (string) MEMBER_ROUTE,
-                    'nama'     => (string) MEMBER_NAMA,
-                    'nim'      => (string) MEMBER_NIM,
-                    'time'     => date('H:i:s'),
-                ],
-                'items' => $items,
-                'sender_stats' => $senderStats,
-            ], JSON_UNESCAPED_UNICODE);
-            exit;
-        }
-
-        if ($result['ok']) {
-            header('Location: index.php?status=sent');
-            exit;
-        }
-
-        $formError = $result['error'] ?? 'Gagal menyimpan pesan.';
-        $oldNama = $inputNama;
-        $oldPesan = $inputPesan;
-    } catch (Throwable $e) {
-        if ($isAjax) {
-            header('Content-Type: application/json; charset=utf-8');
-            http_response_code(500);
-            echo json_encode([
-                'ok'    => false,
-                'error' => 'Koneksi database gagal saat menyimpan pesan.',
-            ], JSON_UNESCAPED_UNICODE);
-            exit;
-        }
-        $formError = 'Koneksi database gagal. Pastikan database kelompok_db dan tabel shout sudah siap.';
-        $oldNama = $inputNama;
-        $oldPesan = $inputPesan;
-    }
-}
-
-// ============================================================================
-// 3. Endpoint Hapus Pesan: AJAX maupun Reguler (action=delete atau action=clear)
+// 2. Endpoint Hapus Pesan: AJAX maupun Reguler (action=delete atau action=clear)
 // ============================================================================
 if ($action === 'delete' || $action === 'clear') {
     $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
@@ -387,6 +312,82 @@ if ($action === 'delete' || $action === 'clear') {
             exit;
         }
         $formError = 'Gagal menghapus log dari database.';
+    }
+}
+
+// ============================================================================
+// 3. Endpoint Kirim Pesan: AJAX (POST ?action=post) maupun Form Reguler
+// ============================================================================
+$formError = '';
+$formSuccess = '';
+$oldNama = '';
+$oldPesan = '';
+
+if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $isAjax = ($action === 'post')
+        || (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+        || (isset($_SERVER['HTTP_ACCEPT']) && strpos((string) $_SERVER['HTTP_ACCEPT'], 'application/json') !== false);
+
+    $rawInput = file_get_contents('php://input');
+    $jsonBody = is_string($rawInput) && $rawInput !== '' ? json_decode($rawInput, true) : null;
+
+    $inputNama  = is_array($jsonBody) && isset($jsonBody['nama'])  ? (string) $jsonBody['nama']  : (string) ($_POST['nama'] ?? '');
+    $inputPesan = is_array($jsonBody) && isset($jsonBody['pesan']) ? (string) $jsonBody['pesan'] : (string) ($_POST['pesan'] ?? '');
+
+    try {
+        $pdo = get_db_connection();
+        $result = create_shout($pdo, $inputNama, $inputPesan);
+
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            if (!$result['ok']) {
+                http_response_code(422);
+                echo json_encode([
+                    'ok'    => false,
+                    'error' => $result['error'] ?? 'Input tidak valid.',
+                ], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            $items = fetch_shouts($pdo, $searchQuery, 50);
+            $senderStats = fetch_sender_stats($pdo);
+            echo json_encode([
+                'ok'      => true,
+                'message' => 'Terkirim via ' . MEMBER_ROUTE . '.',
+                'served_by' => [
+                    'route_id' => (string) MEMBER_ROUTE,
+                    'nama'     => (string) MEMBER_NAMA,
+                    'nim'      => (string) MEMBER_NIM,
+                    'time'     => date('H:i:s'),
+                ],
+                'items' => $items,
+                'count'     => count($items),
+                'sender_stats' => $senderStats,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        if ($result['ok']) {
+            header('Location: index.php?status=sent');
+            exit;
+        }
+
+        $formError = $result['error'] ?? 'Gagal menyimpan pesan.';
+        $oldNama = $inputNama;
+        $oldPesan = $inputPesan;
+    } catch (Throwable $e) {
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(500);
+            echo json_encode([
+                'ok'    => false,
+                'error' => 'Koneksi database gagal saat menyimpan pesan.',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $formError = 'Koneksi database gagal. Pastikan database kelompok_db dan tabel shout sudah siap.';
+        $oldNama = $inputNama;
+        $oldPesan = $inputPesan;
     }
 }
 
