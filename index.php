@@ -100,6 +100,37 @@ function fetch_anggota(PDO $pdo): array
 }
 
 /**
+ * Ambil statistik riwayat jumlah pesan per route_id (m0..m4)
+ *
+ * @return array<string, int>
+ */
+function fetch_sender_stats(PDO $pdo): array
+{
+    $stats = [
+        'm0' => 0,
+        'm1' => 0,
+        'm2' => 0,
+        'm3' => 0,
+        'm4' => 0,
+    ];
+
+    try {
+        $stmt = $pdo->prepare('SELECT route_id, COUNT(*) AS total FROM shout GROUP BY route_id');
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+
+        foreach ($rows as $row) {
+            $r = strtolower((string) $row['route_id']);
+            $stats[$r] = (int) $row['total'];
+        }
+    } catch (Throwable $e) {
+        // Fallback default jika tabel shout belum siap
+    }
+
+    return $stats;
+}
+
+/**
  * Validasi dan simpan pesan baru ke tabel shout
  *
  * @return array{ok: bool, error?: string, id?: int}
@@ -190,6 +221,7 @@ if ($action === 'fetch') {
         $pdo = get_db_connection();
         $limit = isset($_GET['limit']) ? (int) $_GET['limit'] : 50;
         $items = fetch_shouts($pdo, $searchQuery, $limit);
+        $senderStats = fetch_sender_stats($pdo);
 
         echo json_encode([
             'ok' => true,
@@ -202,6 +234,7 @@ if ($action === 'fetch') {
             'query' => $searchQuery,
             'count' => count($items),
             'items' => $items,
+            'sender_stats' => $senderStats,
         ], JSON_UNESCAPED_UNICODE);
     } catch (Throwable $e) {
         http_response_code(500);
@@ -248,6 +281,7 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
             }
 
             $items = fetch_shouts($pdo, $searchQuery, 50);
+            $senderStats = fetch_sender_stats($pdo);
             echo json_encode([
                 'ok'      => true,
                 'message' => 'Terkirim via ' . MEMBER_ROUTE . '.',
@@ -258,6 +292,7 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
                     'time'     => date('H:i:s'),
                 ],
                 'items' => $items,
+                'sender_stats' => $senderStats,
             ], JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -325,6 +360,7 @@ if ($action === 'delete' || $action === 'clear') {
             }
 
             $items = fetch_shouts($pdo, $searchQuery, 50);
+            $senderStats = fetch_sender_stats($pdo);
             echo json_encode([
                 'ok'        => true,
                 'message'   => $msg,
@@ -336,6 +372,7 @@ if ($action === 'delete' || $action === 'clear') {
                 ],
                 'count'     => count($items),
                 'items'     => $items,
+                'sender_stats' => $senderStats,
             ], JSON_UNESCAPED_UNICODE);
             exit;
         }
@@ -365,6 +402,13 @@ if (isset($_GET['status']) && $_GET['status'] === 'deleted') {
 // ============================================================================
 $shouts = [];
 $anggotaList = [];
+$senderStats = [
+    'm0' => 0,
+    'm1' => 0,
+    'm2' => 0,
+    'm3' => 0,
+    'm4' => 0,
+];
 $dbReady = true;
 $dbErrorMsg = '';
 
@@ -372,6 +416,7 @@ try {
     $pdo = get_db_connection();
     $shouts = fetch_shouts($pdo, $searchQuery, 50);
     $anggotaList = fetch_anggota($pdo);
+    $senderStats = fetch_sender_stats($pdo);
 } catch (Throwable $e) {
     $dbReady = false;
     $dbErrorMsg = 'Database belum terhubung atau skema belum diimpor. Impor file app/sql/schema.sql ke MySQL/MariaDB dan periksa config/db.php.';
@@ -959,6 +1004,165 @@ if (empty($anggotaList)) {
             min-width: 0;
         }
 
+        .topology-btn__bottom {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-xs);
+            width: 100%;
+            margin-block-start: var(--space-3xs);
+        }
+
+        .topology-btn__count {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-3xs);
+            font-family: var(--font-mono);
+            font-size: 0.6875rem;
+            font-weight: 600;
+            line-height: 1;
+            padding: var(--space-3xs) var(--space-xs);
+            border: 1px solid var(--color-rule);
+            background-color: var(--color-paper);
+            color: var(--color-ink-2);
+            white-space: nowrap;
+            letter-spacing: 0.01em;
+        }
+
+        .topology-btn__count[data-count="0"] {
+            color: var(--color-muted);
+            border-style: dashed;
+        }
+
+        .topology-btn__count:not([data-count="0"]) {
+            color: var(--color-accent);
+            border-color: var(--color-accent-tint-2);
+            background-color: var(--color-accent-tint);
+        }
+
+        /* ── Riwayat Pengirim Telemetry Panel (Left Rail) ── */
+        .sender-ledger {
+            border-block-start: 1px solid var(--color-rule-strong);
+            padding-block-start: var(--space-md);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-sm);
+        }
+
+        .sender-ledger__header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: var(--space-xs);
+        }
+
+        .sender-ledger__title {
+            font-family: var(--font-display);
+            font-size: 1.05rem;
+            font-weight: 700;
+            line-height: 1.1;
+            color: var(--color-ink);
+        }
+
+        .sender-ledger__total {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--color-muted);
+        }
+
+        .sender-ledger__list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-xs);
+            margin: 0;
+            padding: 0;
+        }
+
+        .sender-card {
+            border: 1px solid var(--color-rule);
+            background-color: var(--color-paper-2);
+            padding: var(--space-xs) var(--space-sm);
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-2xs);
+            transition: border-color 120ms ease, background-color 120ms ease;
+            cursor: pointer;
+            text-align: left;
+            width: 100%;
+            font-family: inherit;
+        }
+
+        .sender-card:hover {
+            border-color: var(--color-ink);
+            background-color: var(--color-paper-3);
+        }
+
+        .sender-card[aria-pressed="true"] {
+            border-color: var(--color-accent);
+            background-color: var(--color-accent-tint);
+        }
+
+        .sender-card__row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: var(--space-xs);
+            line-height: 1.2;
+        }
+
+        .sender-card__identity {
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-xs);
+            min-width: 0;
+        }
+
+        .sender-card__route {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            font-weight: 700;
+            line-height: 1;
+            color: var(--color-accent);
+            background-color: var(--color-paper);
+            border: 1px solid var(--color-rule);
+            padding: var(--space-3xs) var(--space-2xs);
+            white-space: nowrap;
+        }
+
+        .sender-card__name {
+            font-size: 0.8125rem;
+            font-weight: 600;
+            color: var(--color-ink);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .sender-card__badge {
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--color-ink);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+
+        .sender-card__bar-wrap {
+            width: 100%;
+            height: 4px;
+            background-color: var(--color-rule);
+            overflow: hidden;
+            border-radius: 0;
+        }
+
+        .sender-card__bar-fill {
+            height: 100%;
+            background-color: var(--color-accent);
+            width: 0%;
+            transition: width 300ms ease;
+        }
+
         /* ── 4. Main Architectural Ledger Split-Pane (Zero Floating Cards) ── */
         .ledger-workspace {
             flex: 1;
@@ -1457,6 +1661,7 @@ if (empty($anggotaList)) {
                         $rId = (string) $row['route_id'];
                         $isCurrent = ($rId === (string) MEMBER_ROUTE);
                         $isFiltered = (strtolower($searchQuery) === strtolower($rId));
+                        $rCount = $senderStats[strtolower($rId)] ?? 0;
                     ?>
                     <li class="topology-cell <?= $isCurrent ? 'topology-cell--current' : '' ?>">
                         <button
@@ -1475,7 +1680,12 @@ if (empty($anggotaList)) {
                                 </span>
                                 <span class="topology-btn__nim"><?= e((string) $row['nim']) ?></span>
                             </span>
-                            <span class="topology-btn__name"><?= e((string) $row['nama']) ?></span>
+                            <span class="topology-btn__bottom">
+                                <span class="topology-btn__name"><?= e((string) $row['nama']) ?></span>
+                                <span class="topology-btn__count" data-route-count="<?= e($rId) ?>" data-count="<?= (int) $rCount ?>">
+                                    <?= (int) $rCount ?> pesan
+                                </span>
+                            </span>
                         </button>
                     </li>
                 <?php endforeach; ?>
@@ -1558,6 +1768,50 @@ if (empty($anggotaList)) {
                     </button>
                 </div>
             </form>
+
+            <!-- Riwayat Pengirim Telemetry Panel -->
+            <section class="sender-ledger" aria-labelledby="sender-ledger-heading">
+                <div class="sender-ledger__header">
+                    <h2 id="sender-ledger-heading" class="sender-ledger__title">Riwayat Pengirim</h2>
+                    <?php
+                        $grandTotalPesan = array_sum($senderStats);
+                    ?>
+                    <span class="sender-ledger__total" id="senderGrandTotal"><?= (int) $grandTotalPesan ?> total pesan</span>
+                </div>
+
+                <ul class="sender-ledger__list" id="senderLedgerList">
+                    <?php foreach ($anggotaList as $row): ?>
+                        <?php
+                            $rId = (string) $row['route_id'];
+                            $rCount = (int) ($senderStats[strtolower($rId)] ?? 0);
+                            $rPct = $grandTotalPesan > 0 ? round(($rCount / $grandTotalPesan) * 100, 1) : 0;
+                            $isFiltered = (strtolower($searchQuery) === strtolower($rId));
+                        ?>
+                        <li>
+                            <button
+                                type="button"
+                                class="sender-card"
+                                data-sender-route="<?= e($rId) ?>"
+                                aria-pressed="<?= $isFiltered ? 'true' : 'false' ?>"
+                                title="Filter log transmisi untuk <?= e($rId) ?>"
+                            >
+                                <div class="sender-card__row">
+                                    <div class="sender-card__identity">
+                                        <span class="sender-card__route"><?= e($rId) ?></span>
+                                        <span class="sender-card__name"><?= e((string) $row['nama']) ?></span>
+                                    </div>
+                                    <span class="sender-card__badge" data-sender-badge="<?= e($rId) ?>">
+                                        <?= $rCount ?> pesan
+                                    </span>
+                                </div>
+                                <div class="sender-card__bar-wrap" aria-hidden="true">
+                                    <div class="sender-card__bar-fill" data-sender-fill="<?= e($rId) ?>" style="width: <?= $rPct ?>%;"></div>
+                                </div>
+                            </button>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            </section>
         </aside>
 
         <!-- Right Main Column: Chronological Dispatch Stream -->
@@ -1946,6 +2200,7 @@ if (empty($anggotaList)) {
                 if (clearFilterBtn) {
                     clearFilterBtn.hidden = (q === '');
                 }
+                syncSenderCards();
             }
 
             function updateSyncLabel(route, timeStr) {
@@ -1956,6 +2211,57 @@ if (empty($anggotaList)) {
                 const strongNode = document.createElement('strong');
                 strongNode.textContent = route || '<?= e(MEMBER_ROUTE) ?>';
                 pollStatusText.appendChild(strongNode);
+            }
+
+            function renderSenderStats(stats) {
+                if (!stats || typeof stats !== 'object') return;
+
+                let grandTotal = 0;
+                for (const key in stats) {
+                    if (Object.prototype.hasOwnProperty.call(stats, key)) {
+                        grandTotal += Number(stats[key]) || 0;
+                    }
+                }
+
+                const grandTotalEl = document.getElementById('senderGrandTotal');
+                if (grandTotalEl) {
+                    grandTotalEl.textContent = grandTotal + ' total pesan';
+                }
+
+                for (const route in stats) {
+                    if (!Object.prototype.hasOwnProperty.call(stats, route)) continue;
+                    const count = Number(stats[route]) || 0;
+                    const rLower = route.toLowerCase();
+
+                    // Update Top Topology Matrix badge
+                    const topBadge = document.querySelector('.topology-btn__count[data-route-count="' + rLower + '"]');
+                    if (topBadge) {
+                        topBadge.textContent = count + ' pesan';
+                        topBadge.setAttribute('data-count', String(count));
+                    }
+
+                    // Update Sidebar Sender Ledger badge & progress bar
+                    const sideBadge = document.querySelector('.sender-card__badge[data-sender-badge="' + rLower + '"]');
+                    if (sideBadge) {
+                        sideBadge.textContent = count + ' pesan';
+                    }
+
+                    const sideFill = document.querySelector('.sender-card__bar-fill[data-sender-fill="' + rLower + '"]');
+                    if (sideFill) {
+                        const pct = grandTotal > 0 ? Math.round((count / grandTotal) * 1000) / 10 : 0;
+                        sideFill.style.width = pct + '%';
+                    }
+                }
+            }
+
+            function syncSenderCards() {
+                if (!searchInput) return;
+                const q = searchInput.value.trim().toLowerCase();
+                const cards = document.querySelectorAll('.sender-card');
+                cards.forEach(function (card) {
+                    const r = (card.getAttribute('data-sender-route') || '').toLowerCase();
+                    card.setAttribute('aria-pressed', (q !== '' && q === r) ? 'true' : 'false');
+                });
             }
 
             async function fetchLatestShouts() {
@@ -1971,6 +2277,9 @@ if (empty($anggotaList)) {
                     const data = await response.json();
                     if (data && data.ok && Array.isArray(data.items)) {
                         renderShoutList(data.items);
+                        if (data.sender_stats) {
+                            renderSenderStats(data.sender_stats);
+                        }
                         if (data.served_by) {
                             updateSyncLabel(data.served_by.route_id || '', data.served_by.time || '');
                         }
@@ -1996,6 +2305,22 @@ if (empty($anggotaList)) {
                     const btn = e.target.closest('.topology-btn');
                     if (!btn) return;
                     const route = btn.getAttribute('data-route') || '';
+                    if (searchInput.value.trim().toLowerCase() === route.toLowerCase()) {
+                        searchInput.value = '';
+                    } else {
+                        searchInput.value = route;
+                    }
+                    syncTopologyButtons();
+                    fetchLatestShouts();
+                });
+            }
+
+            const senderLedgerList = document.getElementById('senderLedgerList');
+            if (senderLedgerList && searchInput) {
+                senderLedgerList.addEventListener('click', function (e) {
+                    const card = e.target.closest('.sender-card');
+                    if (!card) return;
+                    const route = card.getAttribute('data-sender-route') || '';
                     if (searchInput.value.trim().toLowerCase() === route.toLowerCase()) {
                         searchInput.value = '';
                     } else {
@@ -2120,6 +2445,9 @@ if (empty($anggotaList)) {
                             } else {
                                 fetchLatestShouts();
                             }
+                            if (data.sender_stats) {
+                                renderSenderStats(data.sender_stats);
+                            }
                             if (data.served_by) {
                                 updateSyncLabel(data.served_by.route_id || '', data.served_by.time || '');
                             }
@@ -2206,6 +2534,9 @@ if (empty($anggotaList)) {
                                 renderShoutList(data.items);
                             } else {
                                 fetchLatestShouts();
+                            }
+                            if (data.sender_stats) {
+                                renderSenderStats(data.sender_stats);
                             }
                             if (data.served_by) {
                                 updateSyncLabel(data.served_by.route_id || '', data.served_by.time || '');
