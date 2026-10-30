@@ -7,6 +7,7 @@
  * - Baca daftar pesan terbaru (JOIN tabel anggota untuk menampilkan route_id pengirim)
  * - Polling AJAX otomatis tiap 4 detik (menampilkan route_id server yang melayani polling)
  * - Fitur tambahan: Pencarian pesan (Search filter via prepared statement & live AJAX)
+ * - Fitur tambahan: Hapus pesan individual & hapus semua log transmisi (Safe PDO prepared statement)
  * - Keamanan: Prepared statements (SQLi safe) & htmlspecialchars / textContent (XSS safe)
  */
 
@@ -141,6 +142,40 @@ function create_shout(PDO $pdo, string $rawNama, string $rawPesan): array
     ];
 }
 
+/**
+ * Hapus pesan berdasarkan ID
+ *
+ * @return array{ok: bool, error?: string, deleted?: int}
+ */
+function delete_shout(PDO $pdo, int $id): array
+{
+    if ($id <= 0) {
+        return ['ok' => false, 'error' => 'ID rekaman pesan tidak valid.'];
+    }
+
+    $stmt = $pdo->prepare('DELETE FROM shout WHERE id = :id');
+    $stmt->execute([':id' => $id]);
+
+    $affected = $stmt->rowCount();
+    if ($affected === 0) {
+        return ['ok' => false, 'error' => 'Rekaman pesan tidak ditemukan atau sudah dihapus.'];
+    }
+
+    return ['ok' => true, 'deleted' => $affected];
+}
+
+/**
+ * Hapus seluruh log pesan (Clear all shouts)
+ *
+ * @return array{ok: bool, error?: string, deleted?: int}
+ */
+function clear_all_shouts(PDO $pdo): array
+{
+    $stmt = $pdo->prepare('DELETE FROM shout');
+    $stmt->execute();
+    return ['ok' => true, 'deleted' => $stmt->rowCount()];
+}
+
 $action = isset($_GET['action']) ? (string) $_GET['action'] : '';
 $searchQuery = isset($_GET['q']) ? trim((string) $_GET['q']) : '';
 
@@ -251,12 +286,82 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
     }
 }
 
+// ============================================================================
+// 3. Endpoint Hapus Pesan: AJAX maupun Reguler (action=delete atau action=clear)
+// ============================================================================
+if ($action === 'delete' || $action === 'clear') {
+    $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+        || (isset($_SERVER['HTTP_ACCEPT']) && strpos((string) $_SERVER['HTTP_ACCEPT'], 'application/json') !== false)
+        || (isset($_GET['ajax']) && $_GET['ajax'] === '1');
+
+    $rawInput = file_get_contents('php://input');
+    $jsonBody = is_string($rawInput) && $rawInput !== '' ? json_decode($rawInput, true) : null;
+
+    $deleteId = 0;
+    if (is_array($jsonBody) && isset($jsonBody['id'])) {
+        $deleteId = (int) $jsonBody['id'];
+    } elseif (isset($_POST['id'])) {
+        $deleteId = (int) $_POST['id'];
+    } elseif (isset($_GET['id'])) {
+        $deleteId = (int) $_GET['id'];
+    }
+
+    try {
+        $pdo = get_db_connection();
+        if ($action === 'clear') {
+            $result = clear_all_shouts($pdo);
+            $msg = 'Semua log transmisi berhasil dibersihkan.';
+        } else {
+            $result = delete_shout($pdo, $deleteId);
+            $msg = 'Rekaman #' . str_pad((string) $deleteId, 4, '0', STR_PAD_LEFT) . ' berhasil dihapus.';
+        }
+
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            if (!$result['ok']) {
+                http_response_code(422);
+                echo json_encode(['ok' => false, 'error' => $result['error'] ?? 'Gagal menghapus log.'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            $items = fetch_shouts($pdo, $searchQuery, 50);
+            echo json_encode([
+                'ok'        => true,
+                'message'   => $msg,
+                'served_by' => [
+                    'route_id' => (string) MEMBER_ROUTE,
+                    'nama'     => (string) MEMBER_NAMA,
+                    'nim'      => (string) MEMBER_NIM,
+                    'time'     => date('H:i:s'),
+                ],
+                'count'     => count($items),
+                'items'     => $items,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        header('Location: index.php?status=deleted');
+        exit;
+    } catch (Throwable $e) {
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'Koneksi database gagal saat menghapus log.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $formError = 'Gagal menghapus log dari database.';
+    }
+}
+
 if (isset($_GET['status']) && $_GET['status'] === 'sent') {
     $formSuccess = 'Pesan disimpan melalui node ' . MEMBER_ROUTE . '.';
 }
+if (isset($_GET['status']) && $_GET['status'] === 'deleted') {
+    $formSuccess = 'Log berhasil dihapus melalui node ' . MEMBER_ROUTE . '.';
+}
 
 // ============================================================================
-// 3. Muat Data Awal untuk Render Halaman HTML
+// 4. Muat Data Awal untuk Render Halaman HTML
 // ============================================================================
 $shouts = [];
 $anggotaList = [];
@@ -1202,6 +1307,51 @@ if (empty($anggotaList)) {
             line-height: 1.2;
         }
 
+        .dispatch-row__actions {
+            margin-inline-start: auto;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-2xs);
+        }
+
+        .btn-delete {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--color-muted);
+            font-family: var(--font-mono);
+            font-size: 0.6875rem;
+            line-height: 1;
+            padding: var(--space-3xs) var(--space-xs);
+            cursor: pointer;
+            border-radius: 0;
+            display: inline-flex;
+            align-items: center;
+            gap: var(--space-3xs);
+            transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+        }
+
+        .btn-delete:hover {
+            color: var(--color-err);
+            border-color: var(--color-err-rule);
+            background-color: var(--color-err-bg);
+        }
+
+        .btn-delete:focus-visible {
+            outline: 2px solid var(--color-err);
+            outline-offset: 1px;
+        }
+
+        .btn--danger-compact {
+            color: var(--color-err);
+            border-color: var(--color-err-rule);
+        }
+
+        .btn--danger-compact:hover {
+            background-color: var(--color-err-bg);
+            border-color: var(--color-err);
+            color: var(--color-err);
+        }
+
         .dispatch-row__author {
             font-weight: 700;
             font-size: 0.9375rem;
@@ -1442,6 +1592,7 @@ if (empty($anggotaList)) {
 
                     <button type="button" id="manualRefreshBtn" class="btn btn--compact">Segarkan</button>
                     <button type="button" id="togglePollBtn" class="btn btn--compact">Jeda</button>
+                    <button type="button" id="clearAllBtn" class="btn btn--compact btn--danger-compact" title="Hapus seluruh log transmisi">Hapus Semua</button>
                 </div>
             </div>
 
@@ -1462,6 +1613,22 @@ if (empty($anggotaList)) {
                                     <span class="route-tag" title="Diterima oleh server <?= e((string) ($item['anggota_nama'] ?? $item['route_id'])) ?>">
                                         <?= e((string) $item['route_id']) ?>
                                     </span>
+                                    <div class="dispatch-row__actions">
+                                        <button
+                                            type="button"
+                                            class="btn-delete"
+                                            data-action="delete"
+                                            data-id="<?= $itemId ?>"
+                                            aria-label="Hapus rekaman #<?= str_pad((string) $itemId, 4, '0', STR_PAD_LEFT) ?>"
+                                            title="Hapus rekaman ini"
+                                        >
+                                            <svg class="icon-svg" style="width:0.75rem;height:0.75rem;" viewBox="0 0 24 24" aria-hidden="true">
+                                                <polyline points="3 6 5 6 21 6"></polyline>
+                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                            </svg>
+                                            <span>Hapus</span>
+                                        </button>
+                                    </div>
                                 </div>
                                 <div class="dispatch-row__body"><?= e((string) $item['pesan']) ?></div>
                             </div>
@@ -1710,6 +1877,40 @@ if (empty($anggotaList)) {
                     headerDiv.appendChild(authorSpan);
                     headerDiv.appendChild(nodeSpan);
 
+                    const actionsDiv = document.createElement('div');
+                    actionsDiv.className = 'dispatch-row__actions';
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.type = 'button';
+                    deleteBtn.className = 'btn-delete';
+                    deleteBtn.setAttribute('data-action', 'delete');
+                    deleteBtn.setAttribute('data-id', String(item.id || ''));
+                    deleteBtn.setAttribute('aria-label', 'Hapus rekaman ' + padId(item.id));
+                    deleteBtn.title = 'Hapus rekaman ini';
+
+                    // SVG trash icon
+                    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.setAttribute('class', 'icon-svg');
+                    svg.setAttribute('style', 'width:0.75rem;height:0.75rem;');
+                    svg.setAttribute('viewBox', '0 0 24 24');
+                    svg.setAttribute('aria-hidden', 'true');
+
+                    const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                    polyline.setAttribute('points', '3 6 5 6 21 6');
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    path.setAttribute('d', 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2');
+
+                    svg.appendChild(polyline);
+                    svg.appendChild(path);
+
+                    const btnText = document.createElement('span');
+                    btnText.textContent = 'Hapus';
+
+                    deleteBtn.appendChild(svg);
+                    deleteBtn.appendChild(btnText);
+                    actionsDiv.appendChild(deleteBtn);
+                    headerDiv.appendChild(actionsDiv);
+
                     const bodyDiv = document.createElement('div');
                     bodyDiv.className = 'dispatch-row__body';
                     bodyDiv.textContent = String(item.pesan || '');
@@ -1927,6 +2128,91 @@ if (empty($anggotaList)) {
                         showErrorBanner('Gagal menghubungi server. Periksa koneksi lokal Anda.');
                     } finally {
                         if (submitBtn) submitBtn.disabled = false;
+                    }
+                });
+            }
+
+            // 6. Handler Hapus Pesan (Per-item & Clear All)
+            const clearAllBtn = document.getElementById('clearAllBtn');
+
+            async function deleteRecord(id) {
+                const numId = parseInt(id, 10);
+                if (!numId) return;
+                const formattedId = padId(numId);
+                if (!window.confirm('Hapus rekaman ' + formattedId + ' dari log transmisi?')) {
+                    return;
+                }
+
+                try {
+                    const q = searchInput ? searchInput.value.trim() : '';
+                    const response = await fetch('index.php?action=delete&q=' + encodeURIComponent(q), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: JSON.stringify({ id: numId })
+                    });
+                    const data = await response.json();
+                    if (!response.ok || !data.ok) {
+                        showErrorBanner((data && data.error) ? data.error : 'Gagal menghapus pesan.');
+                    } else {
+                        if (Array.isArray(data.items)) {
+                            renderShoutList(data.items);
+                        } else {
+                            fetchLatestShouts();
+                        }
+                        if (data.served_by) {
+                            updateSyncLabel(data.served_by.route_id || '', data.served_by.time || '');
+                        }
+                    }
+                } catch (err) {
+                    showErrorBanner('Gagal menghubungi server saat menghapus log.');
+                }
+            }
+
+            if (shoutList) {
+                shoutList.addEventListener('click', function (e) {
+                    const btn = e.target.closest('button[data-action="delete"]');
+                    if (!btn) return;
+                    e.preventDefault();
+                    const id = btn.getAttribute('data-id');
+                    if (id) deleteRecord(id);
+                });
+            }
+
+            if (clearAllBtn) {
+                clearAllBtn.addEventListener('click', async function () {
+                    if (!window.confirm('APAKAH ANDA YAKIN?\nSeluruh rekaman log shoutbox di database akan dihapus permanen.')) {
+                        return;
+                    }
+
+                    try {
+                        const q = searchInput ? searchInput.value.trim() : '';
+                        const response = await fetch('index.php?action=clear&q=' + encodeURIComponent(q), {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Accept': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        });
+                        const data = await response.json();
+                        if (!response.ok || !data.ok) {
+                            showErrorBanner((data && data.error) ? data.error : 'Gagal membersihkan seluruh log.');
+                        } else {
+                            if (Array.isArray(data.items)) {
+                                renderShoutList(data.items);
+                            } else {
+                                fetchLatestShouts();
+                            }
+                            if (data.served_by) {
+                                updateSyncLabel(data.served_by.route_id || '', data.served_by.time || '');
+                            }
+                        }
+                    } catch (err) {
+                        showErrorBanner('Gagal menghubungi server saat membersihkan log.');
                     }
                 });
             }

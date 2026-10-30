@@ -22,7 +22,8 @@ Repositori ini merupakan aplikasi bersama (**Shoutbox**) untuk **Tugas 1 Pra-UTS
 1. **Tulis Pesan (`POST`)**: Pengunjung dapat mengirim pesan singkat yang divalidasi di sisi klien (JavaScript) dan sisi server (PHP) serta otomatis mencatat `route_id` server penerima (`MEMBER_ROUTE`).
 2. **Baca & Auto-Refresh AJAX (`GET ?action=fetch`)**: Daftar pesan terbaru diambil dan diperbarui secara berkala setiap **4 detik** menggunakan `fetch()` tanpa memuat ulang halaman, lengkap dengan indikator `route_id` node yang melayani setiap polling AJAX.
 3. **Pencarian Pesan (Live Search)**: Memfilter pesan berdasarkan nama pengirim, isi pesan, maupun `route_id` (`m0`–`m4`).
-4. **Praktik Keamanan Dasar**:
+4. **Hapus Log Transmisi (Delete Log)**: Fitur menghapus rekaman pesan per-item maupun membersihkan seluruh log transmisi via AJAX tanpa reload halaman.
+5. **Praktik Keamanan Dasar**:
    - Seluruh query SQL menggunakan **PDO Prepared Statements** (`PDO::ATTR_EMULATE_PREPARES => false`) sehingga kebal terhadap injeksi SQL (`' OR '1'='1`).
    - Seluruh output melewati `htmlspecialchars(..., ENT_QUOTES, 'UTF-8')` di sisi server dan `textContent` di sisi DOM klien sehingga kebal terhadap XSS (`<script>alert(1)</script>`).
    - Pemisahan penuh antara kode aplikasi (`app/`) dan kredensial lokal (`config/db.php` & `identity.php`).
