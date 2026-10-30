@@ -26,7 +26,7 @@ foreach ($identityCandidates as $identityFile) {
 }
 
 if (!defined('MEMBER_ROUTE')) {
-    define('MEMBER_ROUTE', 'm4');
+    define('MEMBER_ROUTE', 'm3');
 }
 if (!defined('MEMBER_NAMA')) {
     define('MEMBER_NAMA', 'Muhammad Fazil Ataurrahman');
@@ -214,7 +214,74 @@ if ($action === 'fetch') {
 }
 
 // ============================================================================
-// 2. Endpoint Kirim Pesan: AJAX (POST ?action=post) maupun Form Reguler
+// 2. Endpoint Hapus Pesan: AJAX maupun Reguler (action=delete atau action=clear)
+// ============================================================================
+if ($action === 'delete' || $action === 'clear') {
+    $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
+        || (isset($_SERVER['HTTP_ACCEPT']) && strpos((string) $_SERVER['HTTP_ACCEPT'], 'application/json') !== false)
+        || (isset($_GET['ajax']) && $_GET['ajax'] === '1');
+
+    $rawInput = file_get_contents('php://input');
+    $jsonBody = is_string($rawInput) && $rawInput !== '' ? json_decode($rawInput, true) : null;
+
+    $deleteId = 0;
+    if (is_array($jsonBody) && isset($jsonBody['id'])) {
+        $deleteId = (int) $jsonBody['id'];
+    } elseif (isset($_POST['id'])) {
+        $deleteId = (int) $_POST['id'];
+    } elseif (isset($_GET['id'])) {
+        $deleteId = (int) $_GET['id'];
+    }
+
+    try {
+        $pdo = get_db_connection();
+        if ($action === 'clear') {
+            $result = clear_all_shouts($pdo);
+            $msg = 'Semua log transmisi berhasil dibersihkan.';
+        } else {
+            $result = delete_shout($pdo, $deleteId);
+            $msg = 'Rekaman #' . str_pad((string) $deleteId, 4, '0', STR_PAD_LEFT) . ' berhasil dihapus.';
+        }
+
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            if (!$result['ok']) {
+                http_response_code(422);
+                echo json_encode(['ok' => false, 'error' => $result['error'] ?? 'Gagal menghapus log.'], JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+
+            $items = fetch_shouts($pdo, $searchQuery, 50);
+            echo json_encode([
+                'ok'        => true,
+                'message'   => $msg,
+                'served_by' => [
+                    'route_id' => (string) MEMBER_ROUTE,
+                    'nama'     => (string) MEMBER_NAMA,
+                    'nim'      => (string) MEMBER_NIM,
+                    'time'     => date('H:i:s'),
+                ],
+                'count'     => count($items),
+                'items'     => $items,
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+
+        header('Location: index.php?status=deleted');
+        exit;
+    } catch (Throwable $e) {
+        if ($isAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'error' => 'Koneksi database gagal saat menghapus log.'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $formError = 'Gagal menghapus log dari database.';
+    }
+}
+
+// ============================================================================
+// 3. Endpoint Kirim Pesan: AJAX (POST ?action=post) maupun Form Reguler
 // ============================================================================
 $formError = '';
 $formSuccess = '';
@@ -283,73 +350,6 @@ if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'POST') 
         $formError = 'Koneksi database gagal. Pastikan database kelompok_db dan tabel shout sudah siap.';
         $oldNama = $inputNama;
         $oldPesan = $inputPesan;
-    }
-}
-
-// ============================================================================
-// 3. Endpoint Hapus Pesan: AJAX maupun Reguler (action=delete atau action=clear)
-// ============================================================================
-if ($action === 'delete' || $action === 'clear') {
-    $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
-        || (isset($_SERVER['HTTP_ACCEPT']) && strpos((string) $_SERVER['HTTP_ACCEPT'], 'application/json') !== false)
-        || (isset($_GET['ajax']) && $_GET['ajax'] === '1');
-
-    $rawInput = file_get_contents('php://input');
-    $jsonBody = is_string($rawInput) && $rawInput !== '' ? json_decode($rawInput, true) : null;
-
-    $deleteId = 0;
-    if (is_array($jsonBody) && isset($jsonBody['id'])) {
-        $deleteId = (int) $jsonBody['id'];
-    } elseif (isset($_POST['id'])) {
-        $deleteId = (int) $_POST['id'];
-    } elseif (isset($_GET['id'])) {
-        $deleteId = (int) $_GET['id'];
-    }
-
-    try {
-        $pdo = get_db_connection();
-        if ($action === 'clear') {
-            $result = clear_all_shouts($pdo);
-            $msg = 'Semua log transmisi berhasil dibersihkan.';
-        } else {
-            $result = delete_shout($pdo, $deleteId);
-            $msg = 'Rekaman #' . str_pad((string) $deleteId, 4, '0', STR_PAD_LEFT) . ' berhasil dihapus.';
-        }
-
-        if ($isAjax) {
-            header('Content-Type: application/json; charset=utf-8');
-            if (!$result['ok']) {
-                http_response_code(422);
-                echo json_encode(['ok' => false, 'error' => $result['error'] ?? 'Gagal menghapus log.'], JSON_UNESCAPED_UNICODE);
-                exit;
-            }
-
-            $items = fetch_shouts($pdo, $searchQuery, 50);
-            echo json_encode([
-                'ok'        => true,
-                'message'   => $msg,
-                'served_by' => [
-                    'route_id' => (string) MEMBER_ROUTE,
-                    'nama'     => (string) MEMBER_NAMA,
-                    'nim'      => (string) MEMBER_NIM,
-                    'time'     => date('H:i:s'),
-                ],
-                'count'     => count($items),
-                'items'     => $items,
-            ], JSON_UNESCAPED_UNICODE);
-            exit;
-        }
-
-        header('Location: index.php?status=deleted');
-        exit;
-    } catch (Throwable $e) {
-        if ($isAjax) {
-            header('Content-Type: application/json; charset=utf-8');
-            http_response_code(500);
-            echo json_encode(['ok' => false, 'error' => 'Koneksi database gagal saat menghapus log.'], JSON_UNESCAPED_UNICODE);
-            exit;
-        }
-        $formError = 'Gagal menghapus log dari database.';
     }
 }
 
