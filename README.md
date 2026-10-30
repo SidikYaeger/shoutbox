@@ -3,6 +3,7 @@
 Repositori ini merupakan aplikasi bersama (**Shoutbox**) untuk **Tugas 1 Pra-UTS Cloud Computing**. Kode di dalam repositori ini dipasang pada folder `app/` di dalam direktori `personal/` masing-masing anggota kelompok dan dirancang siap dipindahkan ke **VM Compute Engine GCP** dengan Load Balancer Apache2 serta database terpusat setelah UTS.
 
 ---
+.
 
 ## Daftar Anggota Kelompok & Route
 
