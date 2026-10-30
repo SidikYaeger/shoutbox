@@ -1,9 +1,6 @@
 <?php
-/**
- * app/lib/db.php
- * Koneksi database menggunakan PDO (Prepared Statements, utf8mb4).
- * Selalu membaca kredensial dari config/db.php di luar folder app/.
- */
+
+
 
 declare(strict_types=1);
 
@@ -14,7 +11,7 @@ function get_db_connection(): PDO
         return $pdo;
     }
 
-    // Cari config/db.php di luar folder app/ (htdocs/personal/config/db.php)
+    
     $configCandidates = [
         dirname(__DIR__, 2) . '/config/db.php',
         dirname(__DIR__) . '/config/db.php',

@@ -1,8 +1,6 @@
 <?php
-/**
- * app/partials/served_by.php
- * Banner wajib: "Anda dilayani oleh laman <nama> (<NIM>)" di setiap halaman.
- */
+
+
 
 if (!defined('MEMBER_ROUTE') || !defined('MEMBER_NAMA') || !defined('MEMBER_NIM')) {
     $identityCandidates = [

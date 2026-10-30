@@ -1,19 +1,10 @@
 <?php
-/**
- * app/index.php
- * Aplikasi Bersama Kelompok: Shoutbox
- * Fitur:
- * - Tulis pesan singkat (Form input + validasi klien & server + PDO prepared statement)
- * - Baca daftar pesan terbaru (JOIN tabel anggota untuk menampilkan route_id pengirim)
- * - Polling AJAX otomatis tiap 4 detik (menampilkan route_id server yang melayani polling)
- * - Fitur tambahan: Pencarian pesan (Search filter via prepared statement & live AJAX)
- * - Fitur tambahan: Hapus pesan individual & hapus semua log transmisi (Safe PDO prepared statement)
- * - Keamanan: Prepared statements (SQLi safe) & htmlspecialchars / textContent (XSS safe)
- */
+
+
 
 declare(strict_types=1);
 
-// Muat identitas lokal dari luar folder app/
+
 $identityCandidates = [
     dirname(__DIR__) . '/identity.php',
     __DIR__ . '/identity.php',
@@ -37,19 +28,15 @@ if (!defined('MEMBER_NIM')) {
 
 require_once __DIR__ . '/lib/db.php';
 
-/**
- * Helper escaping HTML aman
- */
+
+
 function e(?string $value): string
 {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
-/**
- * Ambil daftar shout terbaru dengan dukungan pencarian (Search)
- *
- * @return array<int, array<string, mixed>>
- */
+
+
 function fetch_shouts(PDO $pdo, string $searchQuery = '', int $limit = 50): array
 {
     $searchQuery = trim($searchQuery);
@@ -87,11 +74,8 @@ function fetch_shouts(PDO $pdo, string $searchQuery = '', int $limit = 50): arra
     return $stmt->fetchAll();
 }
 
-/**
- * Ambil daftar anggota kelompok untuk referensi node route
- *
- * @return array<int, array<string, mixed>>
- */
+
+
 function fetch_anggota(PDO $pdo): array
 {
     $stmt = $pdo->prepare('SELECT route_id, nim, nama FROM anggota ORDER BY route_id ASC');
@@ -99,11 +83,8 @@ function fetch_anggota(PDO $pdo): array
     return $stmt->fetchAll();
 }
 
-/**
- * Ambil statistik riwayat jumlah pesan per route_id (m0..m4)
- *
- * @return array<string, int>
- */
+
+
 function fetch_sender_stats(PDO $pdo): array
 {
     $stats = [
@@ -124,17 +105,14 @@ function fetch_sender_stats(PDO $pdo): array
             $stats[$r] = (int) $row['total'];
         }
     } catch (Throwable $e) {
-        // Fallback default jika tabel shout belum siap
+        
     }
 
     return $stats;
 }
 
-/**
- * Validasi dan simpan pesan baru ke tabel shout
- *
- * @return array{ok: bool, error?: string, id?: int}
- */
+
+
 function create_shout(PDO $pdo, string $rawNama, string $rawPesan): array
 {
     $nama  = trim($rawNama);
@@ -173,11 +151,8 @@ function create_shout(PDO $pdo, string $rawNama, string $rawPesan): array
     ];
 }
 
-/**
- * Hapus pesan berdasarkan ID
- *
- * @return array{ok: bool, error?: string, deleted?: int}
- */
+
+
 function delete_shout(PDO $pdo, int $id): array
 {
     if ($id <= 0) {
@@ -195,11 +170,8 @@ function delete_shout(PDO $pdo, int $id): array
     return ['ok' => true, 'deleted' => $affected];
 }
 
-/**
- * Hapus seluruh log pesan (Clear all shouts)
- *
- * @return array{ok: bool, error?: string, deleted?: int}
- */
+
+
 function clear_all_shouts(PDO $pdo): array
 {
     $stmt = $pdo->prepare('DELETE FROM shout');
@@ -210,9 +182,9 @@ function clear_all_shouts(PDO $pdo): array
 $action = isset($_GET['action']) ? (string) $_GET['action'] : '';
 $searchQuery = isset($_GET['q']) ? trim((string) $_GET['q']) : '';
 
-// ============================================================================
-// 1. Endpoint AJAX: Ambil daftar pesan terbaru (GET ?action=fetch)
-// ============================================================================
+
+
+
 if ($action === 'fetch') {
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store, no-cache, must-revalidate');
@@ -246,9 +218,9 @@ if ($action === 'fetch') {
     exit;
 }
 
-// ============================================================================
-// 2. Endpoint Hapus Pesan: AJAX maupun Reguler (action=delete atau action=clear)
-// ============================================================================
+
+
+
 if ($action === 'delete' || $action === 'clear') {
     $isAjax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest')
         || (isset($_SERVER['HTTP_ACCEPT']) && strpos((string) $_SERVER['HTTP_ACCEPT'], 'application/json') !== false)
@@ -315,9 +287,9 @@ if ($action === 'delete' || $action === 'clear') {
     }
 }
 
-// ============================================================================
-// 3. Endpoint Kirim Pesan: AJAX (POST ?action=post) maupun Form Reguler
-// ============================================================================
+
+
+
 $formError = '';
 $formSuccess = '';
 $oldNama = '';
@@ -398,9 +370,9 @@ if (isset($_GET['status']) && $_GET['status'] === 'deleted') {
     $formSuccess = 'Log berhasil dihapus melalui node ' . MEMBER_ROUTE . '.';
 }
 
-// ============================================================================
-// 4. Muat Data Awal untuk Render Halaman HTML
-// ============================================================================
+
+
+
 $shouts = [];
 $anggotaList = [];
 $senderStats = [
@@ -449,7 +421,7 @@ if (empty($anggotaList)) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 · macrostructure: editorial-dispatch-ledger · nav: N9 · footer: Ft2 · contrast: pass (40-41) · slop: pass (42-45) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · responsive: pass (49) · icons: pass (30) · mobile: pass (34, 49, 50-57) · Slop test: Pass (58/58) */
+        
 
         *, *::before, *::after {
             box-sizing: border-box;
@@ -464,7 +436,7 @@ if (empty($anggotaList)) {
         :root {
             color-scheme: light dark;
 
-            /* 4px-base architectural spacing scale */
+            
             --space-3xs: 0.125rem;
             --space-2xs: 0.25rem;
             --space-xs: 0.5rem;
@@ -475,12 +447,12 @@ if (empty($anggotaList)) {
             --space-2xl: 2.5rem;
             --space-3xl: 3.5rem;
 
-            /* 2+1 Typography (Gate 37): Syne Display + Plus Jakarta Sans Body + JetBrains Mono */
+            
             --font-display: 'Syne', 'Trebuchet MS', sans-serif;
             --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
             --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
 
-            /* Light Palette — Archival Telegraph Broadsheet (Warm Limestone & Vermilion) */
+            
             --paper-light: #f3efe6;
             --paper-elevated-light: #ebe5d8;
             --paper-inset-light: #e2dac9;
@@ -502,7 +474,7 @@ if (empty($anggotaList)) {
             --status-err-bg-light: #f7e4e4;
             --status-err-rule-light: #d69898;
 
-            /* Dark Palette — Carbon Telemetry Ledger (Warm Obsidian & Signal Amber-Orange) */
+            
             --paper-dark: #11100e;
             --paper-elevated-dark: #191714;
             --paper-inset-dark: #221f1b;
@@ -524,7 +496,7 @@ if (empty($anggotaList)) {
             --status-err-bg-dark: #291313;
             --status-err-rule-dark: #6e2828;
 
-            /* Resolved Tokens */
+            
             --color-paper: var(--paper-light);
             --color-paper-2: var(--paper-elevated-light);
             --color-paper-3: var(--paper-inset-light);
@@ -650,7 +622,7 @@ if (empty($anggotaList)) {
             -webkit-font-smoothing: antialiased;
         }
 
-        /* Subtle tactile archival grain (Hallmark E7 recipe, < 0.04 opacity) */
+        
         .paper-grain {
             position: fixed;
             inset: 0;
@@ -665,7 +637,7 @@ if (empty($anggotaList)) {
             font-variant-numeric: tabular-nums;
         }
 
-        /* ── 1. Mandatory Server Identity Strip (partials/served_by.php) ── */
+        
         .served-strip {
             background-color: var(--color-paper-2);
             border-block-end: 1px solid var(--color-rule);
@@ -730,7 +702,7 @@ if (empty($anggotaList)) {
             white-space: nowrap;
         }
 
-        /* ── 2. Broadsheet Masthead (N9 Edge-Aligned Architectural Header) ── */
+        
         .masthead {
             border-block-end: 2px solid var(--color-ink);
             padding-block: var(--space-md) var(--space-lg);
@@ -797,7 +769,7 @@ if (empty($anggotaList)) {
             gap: var(--space-xs);
         }
 
-        /* ── Interactive Buttons (Gate 26, 36, 39, 49) ── */
+        
         .btn {
             display: inline-flex;
             align-items: center;
@@ -875,7 +847,7 @@ if (empty($anggotaList)) {
             flex-shrink: 0;
         }
 
-        /* ── 3. Interactive 5-Node Topology Patchbay (m0..m4) ── */
+        
         .topology-strip {
             border-block-end: 1px solid var(--color-rule-strong);
             background-color: var(--color-paper-2);
@@ -1041,7 +1013,7 @@ if (empty($anggotaList)) {
             background-color: var(--color-accent-tint);
         }
 
-        /* ── Riwayat Pengirim Telemetry Panel (Left Rail) ── */
+        
         .sender-ledger {
             border-block-start: 1px solid var(--color-rule-strong);
             padding-block-start: var(--space-md);
@@ -1164,7 +1136,7 @@ if (empty($anggotaList)) {
             transition: width 300ms ease;
         }
 
-        /* ── 4. Main Architectural Ledger Split-Pane (Zero Floating Cards) ── */
+        
         .ledger-workspace {
             flex: 1;
             width: 100%;
@@ -1181,7 +1153,7 @@ if (empty($anggotaList)) {
             }
         }
 
-        /* Left Rail: Dispatch Composer */
+        
         .dispatch-desk {
             border-block-end: 1px solid var(--color-rule-strong);
             padding-block: var(--space-lg);
@@ -1225,7 +1197,7 @@ if (empty($anggotaList)) {
             white-space: nowrap;
         }
 
-        /* Form Fields & Meter Bar (Gate 39) */
+        
         .field {
             margin-block-end: var(--space-xs);
         }
@@ -1296,7 +1268,7 @@ if (empty($anggotaList)) {
             resize: vertical;
         }
 
-        /* Tactile 2px proportional meter rule under textarea */
+        
         .meter-track {
             width: 100%;
             height: 2px;
@@ -1313,7 +1285,7 @@ if (empty($anggotaList)) {
             transition: transform 80ms ease-out;
         }
 
-        /* Reserved 1lh error slot — never collapses when empty (Gate 39) */
+        
         .error-msg {
             min-height: 1.25rem;
             margin-block-start: var(--space-3xs);
@@ -1366,7 +1338,7 @@ if (empty($anggotaList)) {
             color: var(--color-err);
         }
 
-        /* ── Right Column: Chronological Dispatch Stream ── */
+        
         .stream-column {
             display: flex;
             flex-direction: column;
@@ -1447,7 +1419,7 @@ if (empty($anggotaList)) {
             min-width: 10rem;
         }
 
-        /* ── Indexed Ledger Stream Rows (Zero Floating Boxes) ── */
+        
         .dispatch-ledger {
             list-style: none;
             flex: 1;
@@ -1584,7 +1556,7 @@ if (empty($anggotaList)) {
             border-block-end: 1px solid var(--color-rule);
         }
 
-        /* ── 5. Footer Colophon (Ft2 Single-Line Architectural Strip) ── */
+        
         .colophon {
             border-block-start: 1px solid var(--color-rule-strong);
             background-color: var(--color-paper-2);
@@ -1620,7 +1592,7 @@ if (empty($anggotaList)) {
     </style>
 </head>
 <body>
-    <!-- Subtle tactile paper grain overlay (Gate 33 aria-hidden="true") -->
+    
     <svg class="paper-grain" aria-hidden="true">
         <filter id="archival-grain">
             <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"></feTurbulence>
@@ -1653,7 +1625,7 @@ if (empty($anggotaList)) {
         </div>
     </header>
 
-    <!-- Interactive 5-Node Topology Matrix (Click any node to filter stream) -->
+    
     <section class="topology-strip" aria-label="Topologi Node Kelompok">
         <div class="topology-strip__inner">
             <ul class="topology-matrix" id="nodeMatrix">
@@ -1695,7 +1667,7 @@ if (empty($anggotaList)) {
     </section>
 
     <main class="ledger-workspace">
-        <!-- Left Rail: Dispatch Composer -->
+        
         <aside class="dispatch-desk" aria-labelledby="form-heading">
             <div class="desk-header">
                 <h1 id="form-heading" class="desk-title">Transmisi Baru</h1>
@@ -1770,7 +1742,7 @@ if (empty($anggotaList)) {
                 </div>
             </form>
 
-            <!-- Riwayat Pengirim Telemetry Panel -->
+            
             <section class="sender-ledger" aria-labelledby="sender-ledger-heading">
                 <div class="sender-ledger__header">
                     <h2 id="sender-ledger-heading" class="sender-ledger__title">Riwayat Pengirim</h2>
@@ -1815,7 +1787,7 @@ if (empty($anggotaList)) {
             </section>
         </aside>
 
-        <!-- Right Main Column: Chronological Dispatch Stream -->
+        
         <section class="stream-column" aria-labelledby="feed-heading">
             <div class="stream-toolbar">
                 <div class="stream-toolbar__top">
@@ -1905,7 +1877,6 @@ if (empty($anggotaList)) {
         (function () {
             'use strict';
 
-            // 1. Two-State Color Scheme Toggle (modern-web-guidance dark-mode-toggle)
             const colorSchemeMeta = document.querySelector('meta[name="color-scheme"]');
             const themeBtn = document.getElementById('themeToggleBtn');
 
@@ -1941,7 +1912,6 @@ if (empty($anggotaList)) {
                 });
             }
 
-            // 2. Character Counters, Meter Bar & Accessible Validation State
             const shoutForm = document.getElementById('shoutForm');
             const namaInput = document.getElementById('namaInput');
             const pesanInput = document.getElementById('pesanInput');
@@ -2026,7 +1996,6 @@ if (empty($anggotaList)) {
                 });
             }
 
-            // Enter (without Shift) inside pesanInput submits the form cleanly
             if (pesanInput && shoutForm) {
                 pesanInput.addEventListener('keydown', function (e) {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -2068,7 +2037,6 @@ if (empty($anggotaList)) {
                 ajaxFeedback.appendChild(box);
             }
 
-            // 3. Safe DOM Rendering for Shoutbox Items (Anti-XSS via textContent)
             const shoutList = document.getElementById('shoutList');
             const shoutCount = document.getElementById('shoutCount');
             const pollStatusText = document.getElementById('pollStatusText');
@@ -2143,7 +2111,6 @@ if (empty($anggotaList)) {
                     deleteBtn.setAttribute('aria-label', 'Hapus rekaman ' + padId(item.id));
                     deleteBtn.title = 'Hapus rekaman ini';
 
-                    // SVG trash icon
                     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
                     svg.setAttribute('class', 'icon-svg');
                     svg.setAttribute('style', 'width:0.75rem;height:0.75rem;');
@@ -2179,7 +2146,6 @@ if (empty($anggotaList)) {
                 });
             }
 
-            // 4. AJAX Polling, Live Search & Interactive Topology Filter
             const searchInput = document.getElementById('searchInput');
             const searchForm = document.getElementById('searchForm');
             const clearFilterBtn = document.getElementById('clearFilterBtn');
@@ -2234,14 +2200,12 @@ if (empty($anggotaList)) {
                     const count = Number(stats[route]) || 0;
                     const rLower = route.toLowerCase();
 
-                    // Update Top Topology Matrix badge
                     const topBadge = document.querySelector('.topology-btn__count[data-route-count="' + rLower + '"]');
                     if (topBadge) {
                         topBadge.textContent = count + ' pesan';
                         topBadge.setAttribute('data-count', String(count));
                     }
 
-                    // Update Sidebar Sender Ledger badge & progress bar
                     const sideBadge = document.querySelector('.sender-card__badge[data-sender-badge="' + rLower + '"]');
                     if (sideBadge) {
                         sideBadge.textContent = count + ' pesan';
@@ -2286,7 +2250,6 @@ if (empty($anggotaList)) {
                         }
                     }
                 } catch (err) {
-                    // Pertahankan isi stream saat koneksi jaringan terputus sementara
                 }
             }
 
@@ -2378,7 +2341,6 @@ if (empty($anggotaList)) {
                 });
             }
 
-            // 5. AJAX Submit Form
             if (shoutForm) {
                 shoutForm.addEventListener('submit', async function (e) {
                     e.preventDefault();
@@ -2461,7 +2423,6 @@ if (empty($anggotaList)) {
                 });
             }
 
-            // 6. Handler Hapus Pesan (Per-item & Clear All)
             const clearAllBtn = document.getElementById('clearAllBtn');
 
             async function deleteRecord(id) {
