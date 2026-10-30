@@ -16,21 +16,6 @@ Repositori ini merupakan aplikasi bersama (**Shoutbox**) untuk **Tugas 1 Pra-UTS
 
 ---
 AAAAAA
-AAA
-A
-A
-A
-A
-A
-A
-A
-A
-
-A
-A
-A
-
-A
 
 ## Fitur Aplikasi Shoutbox
 
